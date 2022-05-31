@@ -1,0 +1,184 @@
+---
+title: "netCDF"
+author: "Nina Rynne"
+date: '2022-05-16'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+#libraries used
+library(ncdf4)
+library(raster)
+library(rgdal)
+library(ggplot2)
+library(patchwork)
+library(gridExtra)
+library(networkD3)
+library(tidyr)
+library(sf)
+library(dplyr)
+library(cowplot)
+
+# clear memory
+rm(list = ls())
+
+```
+
+```{r import}
+
+# read in LME shapefile
+shape <- st_read("LMEs66.shp")
+
+# read in netcdf
+boats <- brick("/Users/Nina/OneDrive - University of Tasmania/Nina Rynne - Honours Data Files//Model_outputs/global/CMIP6/boats_gfdl-esm4_nobasd_historical_histsoc_default_tc_global_monthly_1950_2014.nc")
+
+extent(boats) <- extent(shape)
+crs(boats) <- crs(shape)
+```
+
+```{r dim}
+# get dimensions x, y, timesteps
+dim(boats)
+
+#plot(boats[[780]])
+```
+
+```{r crop}
+# crop and mask the catches to the LMEs
+temp <- crop(boats, extent(shape))
+boats_lme <- mask(boats, shape)
+#plot(boats_lme[[780]])
+```
+
+```{r lme42}
+# cut to a single LME
+se_aus <- shape[46,] # south east australian shelf
+temp <- crop(boats, extent(se_aus))
+boats_seaus <- mask(temp, se_aus)
+#plot(boats_seaus[[780]])
+
+```
+
+```{r timeseries}
+ts_se_aus <- raster::extract(boats_seaus, se_aus, fun=sum, na.rm=T, exact=FALSE, weights=TRUE,
+      normaliseWeights=T, cellnumbers=FALSE, small=TRUE, df=T, layer=0, nl=780,
+      factors=FALSE, sp=FALSE)
+
+
+plot(2:781,ts_se_aus[-1],ylab="tc",xlab="month")
+
+# end of Julia's code
+```
+
+
+
+
+``` {r catch}
+# import total catch data
+
+total_catch <- read.csv("/Users/Nina/OneDrive - University of Tasmania/Nina Rynne - Honours Data Files/Reconstructed_data/catch_histsoc_1950_2014.csv")
+
+# create a dataframe for the catch data
+# filter only for LME42
+# group by year and summarise the "reported" data
+# note: convo with Cami on 31/5, need to include IUU data as well in total catch
+
+df_tc <- total_catch %>%
+  filter(LME == "Southeast Australian Shelf") %>%
+  group_by(Year)%>%
+  summarise(tc = sum(Reported))
+
+  
+#glimpse(df_tc)
+#head(total_catch)
+
+```
+
+``` {r boats_to_df}
+
+# converting the boats model predictions into a useable format
+# note: in file naming i used "tc" = "total catch" and "pc" = "predicted catch"
+
+# file I created assigning every one of the 780 months in boats data to the correct year
+year_index <- read.csv("years.csv")
+
+# converting the time series data into a tidy dataframe (variables in their own col, observations in their own row)
+df_pc <- as.data.frame(ts_se_aus, row.names = NULL)
+
+# adding a column with the number of the month from 1-780.
+# assumes data is in correct time series order
+df_pc2 <- data.frame(t(df_pc[-1])) %>%
+  mutate(month = 1:n())
+
+# change the name of the first column for easier use
+colnames(df_pc2)[1] <- "predicted catch"
+
+# join the year data to the time series data, matching on "month"
+df_pc2 <- df_pc2 %>%
+  left_join(year_index, by = c("month"))
+
+# now that every time series observation has a year assigned, group by year and summarise the catch
+df_pc3 <- df_pc2 %>%
+  group_by(Year) %>%
+  summarise(pc = sum(`predicted catch`))
+
+# in a new dataframe add a column for the total catch data as well
+boats_comb <- df_pc3 %>%
+  left_join(df_tc, by = c("Year"))
+
+#glimpse(boats_comb)
+
+# trying to get the total catch and predicted catch data into a similar scale so they can be graphed on the same scale
+# predicted catch multiplier chosen only to try to match scale, no other reason behind it
+boats_comb <- boats_comb %>%
+  mutate(boats_comb, pc_std = pc*100000000000) %>%
+  mutate(boats_comb, model = "boats") %>%
+  mutate(boats_comb, site = "LME42")
+
+glimpse(boats_comb)
+
+```
+
+
+``` {r plots}
+
+# plotting the total and predicted catch data on the same axes limits
+p1 <-ggplot(boats_comb,
+       aes(x = Year, y = tc))+
+  geom_line()+
+  scale_y_continuous(limits = c(0,160000))+
+  theme_bw()
+
+p2 <-ggplot(boats_comb,
+       aes(x = Year, y = pc_std))+
+  geom_line()+
+  scale_y_continuous(limits = c(0,160000))+
+  theme_bw()
+
+plot_grid(p1, p2, labels = "AUTO")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
