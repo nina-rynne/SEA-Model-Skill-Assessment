@@ -1,0 +1,115 @@
+---
+title: "msa_taylordiagram"
+author: "Nina Rynne"
+date: '2022-06-05'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#libraries used
+
+library(tidyverse)
+library(openair)
+library(dplyr)
+library(Metrics)
+
+# clear memory - dont do that. we need the tables from previous file run. 
+# rm(list = ls())
+
+```
+
+``` {r relative_change}
+
+
+tc_20yavg <- df_tc %>%
+  filter(Year <= 1969) %>%
+  summarise(tc = mean(tc))
+
+pc_20yavg <- df_pc %>%
+  filter(Year <= 1969) %>%
+  summarise(pc = mean(pc))
+
+boats_rc <- df_pc %>%
+  left_join(df_tc, by = c("Year")) %>%
+  filter(Year >= 1970) %>%
+  mutate(tc_rc = ((tc - tc_20yavg$tc)/tc_20yavg$tc)) %>%
+  mutate(pc_rc = ((pc - pc_20yavg$pc)/pc_20yavg$pc))
+
+glimpse(boats_rc)
+
+  
+
+
+```
+
+``` {r change_plot}
+
+#ggplot(boats_rc, aes(Year, tc_rc))+
+#  geom_line()+
+#  theme_bw()
+
+#(boats_rc, aes(Year, pc_rc))+
+#  geom_line()+
+#  theme_bw()
+  #geom_bar(aes(fill = pc_rc <0), stat = "identity")+
+  #scale_fill_manual(guide = FALSE, breaks = c(TRUE, FALSE), values = c("red", "blue"))
+  
+
+ggplot()+
+  geom_line(data = boats_rc, aes(x = Year, y = tc_rc), color = "blue")+
+  geom_line(data = boats_rc, aes(x = Year, y = pc_rc), color = "red")
+
+
+```
+
+
+
+``` {r taylor_diagram}
+
+TaylorDiagram(boats_rc, obs = "tc_rc", mod = "pc_rc")
+TaylorDiagram(boats_comb, obs = "tc", mod = "pc")
+```
+
+``` {r bivariate}
+
+ggplot(boats_rc, aes(tc_rc, pc_rc))+
+  geom_point()+
+  geom_smooth(method = "lm")
+
+ggplot(boats_comb, aes(tc, pc))+
+  geom_point()+
+  geom_smooth(method = "lm")
+
+```
+
+```{r stats}
+
+# R correlation coefficient
+cor(boats_comb$tc, boats_comb$pc)
+cor(boats_rc$tc_rc, boats_rc$pc_rc)
+
+#RMSE
+rmse(boats_comb$tc, boats_comb$pc)
+rmse(boats_rc$tc_rc, boats_rc$pc_rc)
+
+# AAE (absolute avg error) or MAE (mean absolute error)
+mae(boats_comb$tc, boats_comb$pc)
+mae(boats_rc$tc_rc, boats_rc$pc_rc)
+
+# average error (bias)
+bias(boats_comb$tc, boats_comb$pc)
+bias(boats_rc$tc_rc, boats_rc$pc_rc)
+
+# reliability index
+GRI(boats_comb$tc, boats_comb$pc)
+GRI(boats_rc$tc_rc, boats_rc$pc_rc)
+
+#modelling efficiency
+NSeff(boats_comb$tc, boats_comb$pc)
+NSeff(boats_rc$tc_rc, boats_rc$pc_rc)
+
+
+
+```

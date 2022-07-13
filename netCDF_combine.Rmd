@@ -1,0 +1,37 @@
+---
+title: "netCDF_combine"
+author: "Nina Rynne"
+date: '2022-05-23'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#load packages
+library(ncdf4)
+library(raster)
+library(rgdal)
+library(ggplot2)
+library(patchwork)
+library(gridExtra)
+library(dplyr)
+library(networkD3)
+library(tidyr)
+library(sf)
+
+# clear memory
+rm(list = ls())
+
+
+#C:\Users\Nina\OneDrive - University of Tasmania\Nina Rynne - Honours Data Files\SEA_model_skill_assessment\SEA-Model-Skill-Assessment\LMEs66.shp'
+
+
+```
+
+```{r loading}
+
+tempnamelist = list.files(path = "/Users/Nina/OneDrive - University of Tasmania/Nina Rynne - Honours Data Files/Model_outputs/global/CMIP6", pattern = "*.nc", full.names = TRUE)
+
+
+```

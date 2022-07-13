@@ -1,0 +1,17 @@
+---
+title: "afma_catch"
+author: "Nina Rynne"
+date: '2022-05-23'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+rm(list = ls())
+
+df_raw <- read_csv("annual-cdr-catch-data-29-06-2020.csv")
+
+glimpse(df_raw)
+```

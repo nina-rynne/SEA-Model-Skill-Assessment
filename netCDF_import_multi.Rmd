@@ -1,0 +1,104 @@
+---
+title: "netCDF"
+author: "Nina Rynne"
+date: '2022-05-16'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+#libraries used
+library(ncdf4)
+library(raster)
+library(rgdal)
+library(ggplot2)
+library(patchwork)
+library(gridExtra)
+library(dplyr)
+library(networkD3)
+library(tidyr)
+library(sf)
+library(cowplot)
+
+# clear memory
+rm(list = ls())
+
+```
+
+```{r import}
+
+# read in LME shapefile
+shape <- st_read("LMEs66.shp")
+
+# read in netcdf
+boats_gfdl <- brick("/Users/Nina/OneDrive - University of Tasmania/Nina Rynne - Honours Data Files//Model_outputs/global/CMIP6/boats_gfdl-esm4_nobasd_historical_histsoc_default_tc_global_monthly_1950_2014.nc")
+
+boats_ipsl <- brick("/Users/Nina/OneDrive - University of Tasmania/Nina Rynne - Honours Data Files//Model_outputs/global/CMIP6/boats_ipsl-cm6a-lr_nobasd_historical_histsoc_default_tc_global_monthly_1950_2014.nc")
+
+ecoocean_gfdl <- brick("/Users/Nina/OneDrive - University of Tasmania/Nina Rynne - Honours Data Files//Model_outputs/global/CMIP6/ecoocean_gfdl-esm4_nobasd_historical_histsoc_default_tc_global_monthly_1950_2014.nc")
+
+ecoocean_ipsl <- brick("/Users/Nina/OneDrive - University of Tasmania/Nina Rynne - Honours Data Files//Model_outputs/global/CMIP6/ecoocean_ipsl-cm6a-lr_nobasd_historical_histsoc_default_tc_global_monthly_1950_2014.nc")
+
+extent(boats_gfdl) <- extent(shape)
+crs(boats_gfdl) <- crs(shape)
+```
+
+```{r dim}
+# get dimensions x, y, timesteps
+dim(boats_gfdl)
+dim(boats_ipsl)
+dim(ecoocean_gfdl)
+dim(ecoocean_ipsl)
+
+plot(boats_gfdl[[780]])
+plot(boats_ipsl[[780]])
+plot(ecoocean_gfdl[[780]])
+plot(ecoocean_ipsl[[780]])
+
+```
+
+```{r crop_gfdl}
+# crop and mask the catches to the LMEs
+temp_gfdl <- crop(boats_gfdl, extent(shape))
+boats_gfdl_lme <- mask(boats_gfdl, shape)
+plot(boats_gfdl_lme[[780]])
+```
+```{r crop_ispl}
+# crop and mask the catches to the LMEs
+temp_ipsl <- crop(boats_ipsl, extent(shape))
+boats_ipsl_lme <- mask(boats_ipsl, shape)
+plot(boats_ipsl_lme[[780]])
+```
+
+
+```{r lme42_gfdl}
+# cut to a single LME
+se_aus <- shape[46,] # south east australian shelf
+temp_gfdl <- crop(boats_gfdl, extent(se_aus))
+boats_gfdl_seaus <- mask(temp_gfdl, se_aus)
+plot(boats_gfdl_seaus[[780]])
+
+```
+```{r lme42_ispl}
+# cut to a single LME
+se_aus <- shape[46,] # south east australian shelf
+temp_ipsl <- crop(boats_ipsl, extent(se_aus))
+boats_ipsl_seaus <- mask(temp_ipsl, se_aus)
+plot(boats_ipsl_seaus[[780]])
+
+```
+
+
+```{r timeseries}
+ts_se_aus <- raster::extract(boats_seaus, se_aus, fun=mean, na.rm=T, exact=FALSE, weights=FALSE,
+      normaliseWeights=T, cellnumbers=FALSE, small=TRUE, df=T, layer=0, nl=408,
+      factors=FALSE, sp=FALSE)
+
+plot(2:409,ts_se_aus[-1],ylab="tc",xlab="month")
+
+
+```

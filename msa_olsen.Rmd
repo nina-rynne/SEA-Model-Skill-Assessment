@@ -1,0 +1,43 @@
+---
+title: "msa_olsen"
+author: "Nina Rynne"
+date: '2022-06-03'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#libraries used
+
+library(tidyverse)
+library(Metrics)
+
+# clear memory - dont do that. we need the tables from previous file run. 
+# rm(list = ls())
+
+```
+
+``` {r first}
+
+# Olsen, et al. 2016. Yes We can.
+# replicating model skill assessment from above paper
+# AE = average error
+# AAE = average absolute error
+# RMSE = root mean squared error
+# MEF = modelling efficiency
+# S = spearman rank correlation
+# P = pearson correlation
+# K = kendall rank correlation
+
+# graph of pairwise comparison of AAE, AE, MEF, RMSE, S (by species in Olsen)
+
+# create table with above measurements
+
+mae(df_tc$tc, df_pc$pc)
+rmse(df_tc$tc, df_pc$pc)
+
+
+
+
+```
