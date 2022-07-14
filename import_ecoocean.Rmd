@@ -1,0 +1,111 @@
+---
+title: "import_ecoocean"
+author: "Nina Rynne"
+date: '2022-07-14'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+#libraries used
+library(ncdf4)
+library(raster)
+library(rgdal)
+library(ggplot2)
+library(patchwork)
+library(gridExtra)
+library(networkD3)
+library(tidyr)
+library(sf)
+library(dplyr)
+library(cowplot)
+
+# clear memory
+rm(list = ls())
+
+```
+
+```{r import}
+
+# read in LME shapefile
+shape <- st_read("LMEs66.shp")
+
+# read in netcdf
+ecoocean_gfdl <- brick("/Users/Nina/OneDrive - University of Tasmania/Nina Rynne - Honours Data Files//Model_outputs/global/CMIP6/ecoocean_gfdl-esm4_nobasd_historical_histsoc_default_tc_global_monthly_1950_2014.nc")
+
+extent(ecoocean_gfdl) <- extent(shape)
+crs(ecoocean_gfdl) <- crs(shape)
+
+```
+
+```{r model_data}
+# crop and mask the catches to the LMEs
+temp <- crop(ecoocean_gfdl, extent(shape))
+eogfdl_lme <- mask(ecoocean_gfdl, shape)
+
+# cut to a single LME
+se_aus <- shape[46,] # south east australian shelf
+temp <- crop(ecoocean_gfdl, extent(se_aus))
+eogfdl_seaus <- mask(temp, se_aus)
+
+# extract data as time series
+#### ALTERNATIVE APPROACH, MANUALLY WEIGHTING BY GRID CELL AREAS BEFORE SUMMING TO GET TOTAL LME CATCH
+area_seaus_cells <- as.matrix(mask(raster::area(eogfdl_seaus)*1e6, se_aus)) # area of grid cells in seaus, in m2 region, in m2
+
+ts_se_step1 <- sweep(as.array(eogfdl_seaus), c(1,2), area_seaus_cells, "*") # Multiply cells in each month by area
+ts_se_step2 <- apply(ts_se_step1, 3,sum, na.rm = TRUE) # Sum over cells, for each month
+
+ts_se_aus <- ts_se_step2*10/1e6 # Convert to grams wet weight (x10), then from grams to tonnes (/1e6)
+```
+
+``` {r reconstruct_data}
+
+# import reconstructed catch data
+
+total_catch <- read.csv("/Users/Nina/OneDrive - University of Tasmania/Nina Rynne - Honours Data Files/Reconstructed_data/catch_histsoc_1950_2014.csv")
+
+# create a dataframe for the catch data
+# filter only for LME42
+
+eogfdl_df_tc <- total_catch %>%
+  filter(LME == "Southeast Australian Shelf") %>%
+  group_by(Year)%>%
+  summarise(tc = sum(Reported+IUUs))
+
+# converting the boats model predictions into a useable format
+# note: in file naming i used "tc" = "total catch" and "pc" = "predicted catch"
+
+# file I created assigning every one of the 780 months in boats data to the correct year
+year_index <- read.csv("years.csv")
+
+# converting the time series data into a tidy dataframe (variables in their own col, observations in their own row)
+eogfdl_df_pc <- as.data.frame(ts_se_aus, row.names = NULL)
+
+# adding a column with the number of the month from 1-780.
+# assumes data is in correct time series order
+eogfdl_df_pc <- eogfdl_df_pc %>%
+  mutate(month = 1:n())
+
+# change the name of the first column for easier use
+colnames(eogfdl_df_pc)[1] <- "predicted catch"
+
+# join the year data to the time series data, matching on "month"
+eogfdl_df_pc <- eogfdl_df_pc %>%
+  left_join(year_index, by = c("month"))
+
+# now that every time series observation has a year assigned, group by year and summarise the catch
+eogfdl_df_pc <- eogfdl_df_pc %>%
+  group_by(Year) %>%
+  summarise(pc = sum(`predicted catch`))
+
+# in a new dataframe add a column for the total catch data as well
+eogfdl_comb <- eogfdl_df_pc %>%
+  left_join(eogfdl_df_tc, by = c("Year"))
+
+
+```
+
+
+
