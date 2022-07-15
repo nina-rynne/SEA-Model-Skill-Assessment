@@ -1,0 +1,184 @@
+---
+title: "import_bgdata"
+author: "Nina Rynne"
+date: '2022-07-15'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#libraries used
+library(ncdf4)
+library(raster)
+library(rgdal)
+library(ggplot2)
+library(patchwork)
+library(gridExtra)
+library(networkD3)
+library(tidyr)
+library(sf)
+library(dplyr)
+library(cowplot)
+
+# clear memory
+rm(list = ls())
+
+```
+
+```{r shapefile}
+
+# read in LME42 shapefile
+shape <- st_read("LMEs66.shp")
+
+```
+
+```{r total_catch}
+
+# read in total catch data
+total_catch <- read.csv("/Users/Nina/OneDrive - University of Tasmania/Nina Rynne - Honours Data Files/Reconstructed_data/catch_histsoc_1950_2014.csv")
+
+# summarise total catch data, filter for LME42
+tc_sum <- total_catch %>%
+  filter(LME == "Southeast Australian Shelf") %>%
+  group_by(Year)%>%
+  summarise(tc = sum(Reported+IUUs))
+
+```
+
+```{r year}
+
+# create year index
+year_index <- read.csv("years.csv")
+
+```
+
+```{r boats_models}
+
+# import boats_gfdl model data
+boats_gfdl <- brick("/Users/Nina/OneDrive - University of Tasmania/Nina Rynne - Honours Data Files//Model_outputs/global/CMIP6/boats_gfdl-esm4_nobasd_historical_histsoc_default_tc_global_monthly_1950_2014.nc")
+
+# import boats_ipsl model data
+boats_ipsl <- brick("/Users/Nina/OneDrive - University of Tasmania/Nina Rynne - Honours Data Files//Model_outputs/global/CMIP6/boats_ipsl-cm6a-lr_nobasd_historical_histsoc_default_tc_global_monthly_1950_2014.nc")
+
+```
+
+```{r ecoocean_models}
+
+# import ecoocean_gfdl
+ecoocean_gfdl <- brick("/Users/Nina/OneDrive - University of Tasmania/Nina Rynne - Honours Data Files//Model_outputs/global/CMIP6/ecoocean_gfdl-esm4_nobasd_historical_histsoc_default_tc_global_monthly_1950_2014.nc")
+
+# import ecoocean_ipsl model data
+ecoocean_ipsl <- brick("/Users/Nina/OneDrive - University of Tasmania/Nina Rynne - Honours Data Files//Model_outputs/global/CMIP6/ecoocean_ipsl-cm6a-lr_nobasd_historical_histsoc_default_tc_global_monthly_1950_2014.nc")
+
+```
+
+```{r crop_mask}
+
+# crop and mask the catches to the LMEs
+
+# cut to a single LME
+se_aus <- shape[46,] # south east australian shel
+
+# boats_gfdl
+temp <- crop(boats_gfdl, extent(shape))
+btgfdl_lme <- mask(boats_gfdl, shape)
+temp <- crop(boats_gfdl, extent(se_aus))
+btgfdl_seaus <- mask(temp, se_aus)
+
+# boats_ipsl
+temp <- crop(boats_ipsl, extent(shape))
+btipsl_lme <- mask(boats_ipsl, shape)
+temp <- crop(boats_ipsl, extent(se_aus))
+btipsl_seaus <- mask(temp, se_aus)
+
+# ecoocean_gfdl
+temp <- crop(ecoocean_gfdl, extent(shape))
+eogfdl_lme <- mask(ecoocean_gfdl, shape)
+temp <- crop(ecoocean_gfdl, extent(se_aus))
+eogfdl_seaus <- mask(temp, se_aus)
+
+# ecoocean_ipsl
+temp <- crop(ecoocean_ipsl, extent(shape))
+eoipsl_lme <- mask(ecoocean_ipsl, shape)
+temp <- crop(ecoocean_ipsl, extent(se_aus))
+eoipsl_seaus <- mask(temp, se_aus)
+
+```
+
+```{r extract_timeseries}
+
+# creating table for total and predicted catch data across all models
+df_outputs <- tc_sum
+
+# boats_gfdl data
+area_seaus_cells <- as.matrix(mask(raster::area(btgfdl_seaus)*1e6, se_aus)) # area of grid cells in seaus, in m2 region, in m2
+ts_se_step1 <- sweep(as.array(btgfdl_seaus), c(1,2), area_seaus_cells, "*") # Multiply cells in each month by area
+ts_se_step2 <- apply(ts_se_step1, 3,sum, na.rm = TRUE) # Sum over cells, for each month
+ts_se_aus <- ts_se_step2*10/1e6 # Convert to grams wet weight (x10), then from grams to tonnes (/1e6)
+# converting the time series data into a tidy dataframe (variables in their own col, observations in their own row)
+btgfdl_pc <- as.data.frame(ts_se_aus, row.names = NULL) %>%
+  mutate(month = 1:n()) %>%
+  left_join(year_index, by = c("month")) %>%
+  group_by(Year) %>%
+  summarise(btgfdl_catch = sum(`ts_se_aus`))
+# add to the outputs dataframe
+df_outputs <- df_outputs %>%
+  left_join(btgfdl_pc, by = c("Year"))
+
+# boats_ipsl data
+area_seaus_cells <- as.matrix(mask(raster::area(btipsl_seaus)*1e6, se_aus)) # area of grid cells in seaus, in m2 region, in m2
+ts_se_step1 <- sweep(as.array(btipsl_seaus), c(1,2), area_seaus_cells, "*") # Multiply cells in each month by area
+ts_se_step2 <- apply(ts_se_step1, 3,sum, na.rm = TRUE) # Sum over cells, for each month
+ts_se_aus <- ts_se_step2*10/1e6 # Convert to grams wet weight (x10), then from grams to tonnes (/1e6)
+# converting the time series data into a tidy dataframe (variables in their own col, observations in their own row)
+btipsl_pc <- as.data.frame(ts_se_aus, row.names = NULL) %>%
+  mutate(month = 1:n()) %>%
+  left_join(year_index, by = c("month")) %>%
+  group_by(Year) %>%
+  summarise(btipsl_catch = sum(`ts_se_aus`))
+# add to the outputs dataframe
+df_outputs <- df_outputs %>%
+  left_join(btipsl_pc, by = c("Year"))
+
+# ecoocean_gfdl data
+area_seaus_cells <- as.matrix(mask(raster::area(eogfdl_seaus)*1e6, se_aus)) # area of grid cells in seaus, in m2 region, in m2
+eogfdl_seaus_corrected <- as.array(eogfdl_seaus)
+eogfdl_seaus_corrected[eogfdl_seaus_corrected > 1e36] <- NA # convert land values to NA
+ts_se_step1 <- sweep(eogfdl_seaus_corrected, c(1,2), area_seaus_cells, "*") # Multiply cells in each month by area
+ts_se_step2 <- apply(ts_se_step1, 3,sum, na.rm = TRUE) # Sum over cells, for each month
+ts_se_aus <- ts_se_step2*10/1e6 # Convert to grams wet weight (x10), then from grams to tonnes (/1e6)
+# converting the time series data into a tidy dataframe (variables in their own col, observations in their own row)
+eogfdl_pc <- as.data.frame(ts_se_aus, row.names = NULL) %>%
+  mutate(month = 1:n()) %>%
+  left_join(year_index, by = c("month")) %>%
+  group_by(Year) %>%
+  summarise(eogfdl_catch = sum(`ts_se_aus`))
+# add to the outputs dataframe
+df_outputs <- df_outputs %>%
+  left_join(eogfdl_pc, by = c("Year"))
+
+# ecoocean_ipsl data
+area_seaus_cells <- as.matrix(mask(raster::area(eoipsl_seaus)*1e6, se_aus)) # area of grid cells in seaus, in m2 region, in m2
+eoipsl_seaus_corrected <- as.array(eoipsl_seaus)
+eoipsl_seaus_corrected[eoipsl_seaus_corrected > 1e36] <- NA # convert land values to NA
+ts_se_step1 <- sweep(eoipsl_seaus_corrected, c(1,2), area_seaus_cells, "*") # Multiply cells in each month by area
+ts_se_step2 <- apply(ts_se_step1, 3,sum, na.rm = TRUE) # Sum over cells, for each month
+ts_se_aus <- ts_se_step2*10/1e6 # Convert to grams wet weight (x10), then from grams to tonnes (/1e6)
+# converting the time series data into a tidy dataframe (variables in their own col, observations in their own row)
+eoipsl_pc <- as.data.frame(ts_se_aus, row.names = NULL) %>%
+  mutate(month = 1:n()) %>%
+  left_join(year_index, by = c("month")) %>%
+  group_by(Year) %>%
+  summarise(eoipsl_catch = sum(`ts_se_aus`))
+# add to the outputs dataframe
+df_outputs <- df_outputs %>%
+  left_join(eoipsl_pc, by = c("Year"))
+
+```
+
+
+
+
+
+

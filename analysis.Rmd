@@ -1,0 +1,24 @@
+---
+title: "analysis"
+author: "Nina Rynne"
+date: '2022-07-15'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#libraries used
+library(ncdf4)
+library(raster)
+library(rgdal)
+library(ggplot2)
+library(patchwork)
+library(gridExtra)
+library(networkD3)
+library(tidyr)
+library(sf)
+library(dplyr)
+library(cowplot)
+
+```
